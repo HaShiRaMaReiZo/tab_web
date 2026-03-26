@@ -2,28 +2,50 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Search, FolderOpen, Folder } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { hierarchicalCategories, searchCategories } from '@/lib/hierarchical-categories';
+import type { HierarchicalCategory, SubCategory } from '@/lib/types';
 
 interface MobileCategoryMenuProps {
   onNavigate?: () => void;
 }
 
 export function MobileCategoryMenu({ onNavigate }: MobileCategoryMenuProps) {
-  const [expandedMain, setExpandedMain] = useState<string | null>(null);
-  const [expandedSub, setExpandedSub] = useState<string | null>(null);
+  const [expandedMain, setExpandedMain] = useState<Set<string>>(new Set());
+  const [expandedSub, setExpandedSub] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleMainToggle = (id: string) => {
-    setExpandedMain(expandedMain === id ? null : id);
-    setExpandedSub(null);
+  const toggleMainCategory = (id: string) => {
+    setExpandedMain((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        // Also collapse all sub-categories under this main category
+        const mainCat = hierarchicalCategories.find(c => c.id === id);
+        mainCat?.subCategories?.forEach(sub => {
+          expandedSub.delete(sub.id);
+        });
+        setExpandedSub(new Set(expandedSub));
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
-  const handleSubToggle = (id: string) => {
-    setExpandedSub(expandedSub === id ? null : id);
+  const toggleSubCategory = (id: string) => {
+    setExpandedSub((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   const handleLinkClick = () => {
@@ -75,6 +97,7 @@ export function MobileCategoryMenu({ onNavigate }: MobileCategoryMenuProps) {
                         onClick={handleLinkClick}
                         className="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
                       >
+                        <Folder className="h-4 w-4 text-primary" />
                         <span className="font-medium">{cat.name}</span>
                       </Link>
                     ))}
@@ -112,7 +135,7 @@ export function MobileCategoryMenu({ onNavigate }: MobileCategoryMenuProps) {
                       >
                         <span className="font-medium">{subSub.name}</span>
                         <span className="text-xs text-muted-foreground">
-                          {subParent.name} › {mainParent.name}
+                          {subParent.name} &rsaquo; {mainParent.name}
                         </span>
                       </Link>
                     ))}
@@ -122,96 +145,177 @@ export function MobileCategoryMenu({ onNavigate }: MobileCategoryMenuProps) {
             )}
           </div>
         ) : (
-          // Accordion Category List
+          // Expandable Tree
           <div className="space-y-1">
             {hierarchicalCategories.map((mainCategory) => (
-              <div key={mainCategory.id} className="border-b border-border last:border-0">
-                {/* Main Category */}
-                <div className="flex items-center">
-                  <Link
-                    href={`/category/${mainCategory.id}`}
-                    onClick={handleLinkClick}
-                    className="flex-1 py-3 text-sm font-medium"
-                  >
-                    {mainCategory.name}
-                    {mainCategory.nameMyanmar && mainCategory.nameMyanmar !== mainCategory.name && (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        ({mainCategory.nameMyanmar})
-                      </span>
-                    )}
-                  </Link>
-                  {mainCategory.subCategories && mainCategory.subCategories.length > 0 && (
-                    <button
-                      onClick={() => handleMainToggle(mainCategory.id)}
-                      className="p-3"
-                      aria-expanded={expandedMain === mainCategory.id}
-                    >
-                      <ChevronDown
-                        className={cn(
-                          'h-4 w-4 transition-transform',
-                          expandedMain === mainCategory.id && 'rotate-180'
-                        )}
-                      />
-                    </button>
-                  )}
-                </div>
-
-                {/* Sub Categories */}
-                {expandedMain === mainCategory.id && mainCategory.subCategories && (
-                  <div className="mb-2 ml-4 space-y-1 border-l border-border pl-4">
-                    {mainCategory.subCategories.map((subCategory) => (
-                      <div key={subCategory.id}>
-                        <div className="flex items-center">
-                          <Link
-                            href={`/category/${subCategory.id}`}
-                            onClick={handleLinkClick}
-                            className="flex-1 py-2 text-sm"
-                          >
-                            {subCategory.name}
-                          </Link>
-                          {subCategory.subSubCategories && subCategory.subSubCategories.length > 0 && (
-                            <button
-                              onClick={() => handleSubToggle(subCategory.id)}
-                              className="p-2"
-                              aria-expanded={expandedSub === subCategory.id}
-                            >
-                              <ChevronRight
-                                className={cn(
-                                  'h-4 w-4 transition-transform',
-                                  expandedSub === subCategory.id && 'rotate-90'
-                                )}
-                              />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Sub-Sub Categories */}
-                        {expandedSub === subCategory.id && subCategory.subSubCategories && (
-                          <div className="mb-2 ml-4 space-y-1 border-l border-border pl-4">
-                            {subCategory.subSubCategories.map((subSubCategory) => (
-                              <Link
-                                key={subSubCategory.id}
-                                href={`/category/${subSubCategory.id}`}
-                                onClick={handleLinkClick}
-                                className="block py-1.5 text-sm text-muted-foreground hover:text-foreground"
-                              >
-                                {subSubCategory.name}
-                                <span className="ml-2 text-xs">
-                                  ({subSubCategory.bookCount.toLocaleString()})
-                                </span>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <MobileTreeItem
+                key={mainCategory.id}
+                category={mainCategory}
+                isExpanded={expandedMain.has(mainCategory.id)}
+                expandedSub={expandedSub}
+                onToggle={() => toggleMainCategory(mainCategory.id)}
+                onToggleSub={toggleSubCategory}
+                onLinkClick={handleLinkClick}
+              />
             ))}
           </div>
         )}
       </ScrollArea>
+    </div>
+  );
+}
+
+// Mobile Tree Item Component
+interface MobileTreeItemProps {
+  category: HierarchicalCategory;
+  isExpanded: boolean;
+  expandedSub: Set<string>;
+  onToggle: () => void;
+  onToggleSub: (id: string) => void;
+  onLinkClick: () => void;
+}
+
+function MobileTreeItem({ 
+  category, 
+  isExpanded, 
+  expandedSub,
+  onToggle, 
+  onToggleSub,
+  onLinkClick 
+}: MobileTreeItemProps) {
+  const hasChildren = category.subCategories && category.subCategories.length > 0;
+  const Icon = isExpanded ? FolderOpen : Folder;
+
+  return (
+    <div className="border-b border-border last:border-0">
+      {/* Main Category Row */}
+      <div className="flex items-center">
+        {/* Expand/Collapse Toggle */}
+        {hasChildren && (
+          <button
+            onClick={onToggle}
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center"
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            <ChevronRight 
+              className={cn(
+                'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                isExpanded && 'rotate-90'
+              )} 
+            />
+          </button>
+        )}
+
+        {/* Category Link */}
+        <Link
+          href={`/category/${category.id}`}
+          onClick={onLinkClick}
+          className={cn(
+            'flex flex-1 items-center gap-2 py-3 pr-3',
+            !hasChildren && 'pl-10'
+          )}
+        >
+          <Icon className="h-4 w-4 text-primary" />
+          <span className="flex-1 font-medium text-foreground">{category.name}</span>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {category.bookCount.toLocaleString()}
+          </span>
+        </Link>
+      </div>
+
+      {/* Sub Categories (Expanded) */}
+      {isExpanded && hasChildren && (
+        <div className="mb-2 ml-6 border-l border-border pl-2">
+          {category.subCategories!.map((subCategory) => (
+            <MobileSubTreeItem
+              key={subCategory.id}
+              subCategory={subCategory}
+              isExpanded={expandedSub.has(subCategory.id)}
+              onToggle={() => onToggleSub(subCategory.id)}
+              onLinkClick={onLinkClick}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Mobile Sub Tree Item Component
+interface MobileSubTreeItemProps {
+  subCategory: SubCategory;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onLinkClick: () => void;
+}
+
+function MobileSubTreeItem({ 
+  subCategory, 
+  isExpanded, 
+  onToggle, 
+  onLinkClick 
+}: MobileSubTreeItemProps) {
+  const hasChildren = subCategory.subSubCategories && subCategory.subSubCategories.length > 0;
+
+  return (
+    <div>
+      {/* Sub Category Row */}
+      <div className="flex items-center">
+        {/* Expand/Collapse Toggle */}
+        {hasChildren && (
+          <button
+            onClick={onToggle}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center"
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            <ChevronRight 
+              className={cn(
+                'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
+                isExpanded && 'rotate-90'
+              )} 
+            />
+          </button>
+        )}
+
+        {/* Sub Category Link */}
+        <Link
+          href={`/category/${subCategory.id}`}
+          onClick={onLinkClick}
+          className={cn(
+            'flex flex-1 items-center gap-2 py-2 pr-3 text-sm',
+            !hasChildren && 'pl-9'
+          )}
+        >
+          <span className="flex-1 text-foreground">{subCategory.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {subCategory.bookCount.toLocaleString()}
+          </span>
+        </Link>
+      </div>
+
+      {/* Sub-Sub Categories (Expanded) */}
+      {isExpanded && hasChildren && (
+        <div className="mb-2 ml-6 border-l border-border/50 pl-2">
+          {subCategory.subSubCategories!.map((subSubCategory) => (
+            <Link
+              key={subSubCategory.id}
+              href={`/category/${subSubCategory.id}`}
+              onClick={onLinkClick}
+              className="flex items-center gap-2 py-2 pl-2 pr-3 text-sm"
+            >
+              <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/40" />
+              <span className="flex-1 text-muted-foreground">
+                {subSubCategory.name}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {subSubCategory.bookCount.toLocaleString()}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
