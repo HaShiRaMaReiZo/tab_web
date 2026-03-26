@@ -2,13 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Menu, X, Search, FolderOpen, Folder } from 'lucide-react';
+import { ChevronRight, Menu, X, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { hierarchicalCategories, searchCategories } from '@/lib/hierarchical-categories';
-import type { HierarchicalCategory, SubCategory } from '@/lib/types';
+import type { HierarchicalCategory, SubCategory, SubSubCategory } from '@/lib/types';
 
 interface CategoryMegaMenuProps {
   className?: string;
@@ -16,16 +16,18 @@ interface CategoryMegaMenuProps {
 
 export function CategoryMegaMenu({ className }: CategoryMegaMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [expandedMain, setExpandedMain] = useState<Set<string>>(new Set());
-  const [expandedSub, setExpandedSub] = useState<Set<string>>(new Set());
+  const [hoveredMain, setHoveredMain] = useState<HierarchicalCategory | null>(null);
+  const [selectedSub, setSelectedSub] = useState<SubCategory | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Close menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        resetHoverState();
       }
     }
 
@@ -38,6 +40,7 @@ export function CategoryMegaMenu({ className }: CategoryMegaMenuProps) {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setIsOpen(false);
+        resetHoverState();
       }
     }
 
@@ -45,56 +48,27 @@ export function CategoryMegaMenu({ className }: CategoryMegaMenuProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const toggleMainCategory = (id: string) => {
-    setExpandedMain((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        // Also collapse all sub-categories under this main category
-        const mainCat = hierarchicalCategories.find(c => c.id === id);
-        mainCat?.subCategories?.forEach(sub => {
-          expandedSub.delete(sub.id);
-        });
-        setExpandedSub(new Set(expandedSub));
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const resetHoverState = () => {
+    setHoveredMain(null);
+    setSelectedSub(null);
   };
 
-  const toggleSubCategory = (id: string) => {
-    setExpandedSub((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const handleMainCategoryHover = (category: HierarchicalCategory) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    setHoveredMain(category);
+    setSelectedSub(null);
+  };
+
+  const handleSubCategoryHover = (subCategory: SubCategory) => {
+    setSelectedSub(subCategory);
   };
 
   const handleLinkClick = () => {
     setIsOpen(false);
     setSearchQuery('');
-  };
-
-  const collapseAll = () => {
-    setExpandedMain(new Set());
-    setExpandedSub(new Set());
-  };
-
-  const expandAll = () => {
-    const allMainIds = new Set(hierarchicalCategories.map(c => c.id));
-    const allSubIds = new Set<string>();
-    hierarchicalCategories.forEach(main => {
-      main.subCategories?.forEach(sub => {
-        allSubIds.add(sub.id);
-      });
-    });
-    setExpandedMain(allMainIds);
-    setExpandedSub(allSubIds);
+    resetHoverState();
   };
 
   const searchResults = searchQuery.length >= 2 ? searchCategories(searchQuery) : null;
@@ -116,7 +90,10 @@ export function CategoryMegaMenu({ className }: CategoryMegaMenuProps) {
       {/* Trigger Button */}
       <Button
         variant="ghost"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          setIsOpen(!isOpen);
+          if (!isOpen) resetHoverState();
+        }}
         className={cn(
           'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
           isOpen
@@ -130,37 +107,19 @@ export function CategoryMegaMenu({ className }: CategoryMegaMenuProps) {
         <span>All Categories</span>
       </Button>
 
-      {/* Expandable Tree Panel */}
+      {/* Multi-Column Flyout Menu */}
       {isOpen && (
         <div 
-          className="absolute left-0 top-full z-50 mt-1 w-[420px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-card shadow-xl"
+          className="absolute left-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-card shadow-xl"
         >
           {/* Header with Search */}
           <div className="border-b border-border bg-muted/30 p-3">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Browse Categories</h3>
                 <p className="text-xs text-muted-foreground">
                   {hierarchicalCategories.length} main categories, {totalSubSub} sub-categories
                 </p>
-              </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={expandAll}
-                  className="h-7 px-2 text-xs"
-                >
-                  Expand All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={collapseAll}
-                  className="h-7 px-2 text-xs"
-                >
-                  Collapse
-                </Button>
               </div>
             </div>
             <div className="relative">
@@ -170,102 +129,101 @@ export function CategoryMegaMenu({ className }: CategoryMegaMenuProps) {
                 placeholder="Search all categories..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 pl-9 text-sm"
+                className="h-9 w-72 pl-9 text-sm"
               />
             </div>
           </div>
 
-          {/* Tree Content */}
-          <ScrollArea className="h-[400px]">
-            {searchQuery.length >= 2 ? (
-              // Search Results
-              <div className="p-3">
-                {!hasSearchResults ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    No categories found for &quot;{searchQuery}&quot;
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {searchResults?.mainCategories.length > 0 && (
-                      <div>
-                        <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                          Main Categories
-                        </p>
-                        {searchResults.mainCategories.map((cat) => (
-                          <Link
-                            key={cat.id}
-                            href={`/category/${cat.id}`}
-                            onClick={handleLinkClick}
-                            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-primary hover:text-primary-foreground"
-                          >
-                            <Folder className="h-4 w-4" />
-                            <span className="font-medium">{cat.name}</span>
-                            {cat.nameMyanmar && cat.nameMyanmar !== cat.name && (
-                              <span className="text-xs text-muted-foreground">({cat.nameMyanmar})</span>
-                            )}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                    {searchResults?.subCategories.length > 0 && (
-                      <div>
-                        <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                          Sub Categories
-                        </p>
-                        {searchResults.subCategories.slice(0, 15).map(({ parent, sub }) => (
-                          <Link
-                            key={sub.id}
-                            href={`/category/${sub.id}`}
-                            onClick={handleLinkClick}
-                            className="flex flex-col rounded-md px-3 py-2 text-sm transition-colors hover:bg-primary hover:text-primary-foreground"
-                          >
-                            <span className="font-medium">{sub.name}</span>
-                            <span className="text-xs text-muted-foreground">in {parent.name}</span>
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                    {searchResults?.subSubCategories.length > 0 && (
-                      <div>
-                        <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                          Sub-Sub Categories
-                        </p>
-                        {searchResults.subSubCategories.slice(0, 20).map(({ mainParent, subParent, subSub }) => (
-                          <Link
-                            key={subSub.id}
-                            href={`/category/${subSub.id}`}
-                            onClick={handleLinkClick}
-                            className="flex flex-col rounded-md px-3 py-2 text-sm transition-colors hover:bg-primary hover:text-primary-foreground"
-                          >
-                            <span className="font-medium">{subSub.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {subParent.name} &rsaquo; {mainParent.name}
-                            </span>
-                          </Link>
-                        ))}
-                      </div>
-                    )}
+          {/* Content Area */}
+          {searchQuery.length >= 2 ? (
+            // Search Results
+            <SearchResults 
+              searchResults={searchResults}
+              hasSearchResults={hasSearchResults}
+              searchQuery={searchQuery}
+              onLinkClick={handleLinkClick}
+            />
+          ) : (
+            // Hover-based Multi-Column Navigation
+            <div className="flex">
+              {/* Column 1: Main Categories */}
+              <div className="w-56 border-r border-border bg-muted/20">
+                <ScrollArea className="h-[420px]">
+                  <div className="p-2">
+                    {hierarchicalCategories.map((category) => (
+                      <MainCategoryItem
+                        key={category.id}
+                        category={category}
+                        isHovered={hoveredMain?.id === category.id}
+                        onHover={() => handleMainCategoryHover(category)}
+                        onLinkClick={handleLinkClick}
+                      />
+                    ))}
                   </div>
-                )}
+                </ScrollArea>
               </div>
-            ) : (
-              // Expandable Tree
-              <div className="p-2">
-                {hierarchicalCategories.map((mainCategory) => (
-                  <TreeItem
-                    key={mainCategory.id}
-                    category={mainCategory}
-                    isExpanded={expandedMain.has(mainCategory.id)}
-                    expandedSub={expandedSub}
-                    onToggle={() => toggleMainCategory(mainCategory.id)}
-                    onToggleSub={toggleSubCategory}
-                    onLinkClick={handleLinkClick}
-                    level={0}
-                  />
-                ))}
-              </div>
-            )}
-          </ScrollArea>
+
+              {/* Column 2: Sub Categories (appears on main category hover) */}
+              {hoveredMain && hoveredMain.subCategories && hoveredMain.subCategories.length > 0 && (
+                <div className="w-64 border-r border-border bg-card">
+                  <div className="border-b border-border bg-muted/30 px-3 py-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      {hoveredMain.name}
+                    </p>
+                  </div>
+                  <ScrollArea className="h-[388px]">
+                    <div className="p-2">
+                      {hoveredMain.subCategories.map((subCategory) => (
+                        <SubCategoryItem
+                          key={subCategory.id}
+                          subCategory={subCategory}
+                          isSelected={selectedSub?.id === subCategory.id}
+                          onHover={() => handleSubCategoryHover(subCategory)}
+                          onLinkClick={handleLinkClick}
+                        />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {/* Column 3: Sub-Sub Categories (appears on sub category select) */}
+              {selectedSub && selectedSub.subSubCategories && selectedSub.subSubCategories.length > 0 && (
+                <div className="w-72 bg-card">
+                  <div className="border-b border-border bg-muted/30 px-3 py-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      {selectedSub.name}
+                    </p>
+                  </div>
+                  <ScrollArea className="h-[388px]">
+                    <div className="grid grid-cols-1 gap-1 p-2">
+                      {selectedSub.subSubCategories.map((subSubCategory) => (
+                        <SubSubCategoryItem
+                          key={subSubCategory.id}
+                          subSubCategory={subSubCategory}
+                          onLinkClick={handleLinkClick}
+                        />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {/* Placeholder when no main category is hovered */}
+              {!hoveredMain && (
+                <div className="flex w-64 items-center justify-center bg-muted/10 p-8 text-center">
+                  <div>
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                      <ChevronRight className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Hover over a category to see sub-categories
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Footer */}
           <div className="border-t border-border bg-muted/30 p-3">
@@ -283,181 +241,224 @@ export function CategoryMegaMenu({ className }: CategoryMegaMenuProps) {
   );
 }
 
-// Tree Item Component for Main Categories
-interface TreeItemProps {
+// Main Category Item Component
+interface MainCategoryItemProps {
   category: HierarchicalCategory;
-  isExpanded: boolean;
-  expandedSub: Set<string>;
-  onToggle: () => void;
-  onToggleSub: (id: string) => void;
+  isHovered: boolean;
+  onHover: () => void;
   onLinkClick: () => void;
-  level: number;
 }
 
-function TreeItem({ 
-  category, 
-  isExpanded, 
-  expandedSub,
-  onToggle, 
-  onToggleSub,
-  onLinkClick,
-  level 
-}: TreeItemProps) {
+function MainCategoryItem({ category, isHovered, onHover, onLinkClick }: MainCategoryItemProps) {
   const hasChildren = category.subCategories && category.subCategories.length > 0;
-  const Icon = isExpanded ? FolderOpen : Folder;
 
   return (
-    <div className="select-none">
-      {/* Main Category Row */}
-      <div 
-        className={cn(
-          'group flex items-center gap-1 rounded-md transition-colors',
-          'hover:bg-muted'
-        )}
+    <div
+      className={cn(
+        'group flex items-center gap-2 rounded-md px-3 py-2.5 transition-colors cursor-pointer',
+        isHovered ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+      )}
+      onMouseEnter={onHover}
+    >
+      {/* Category Icon */}
+      {category.icon && (
+        <span className="flex-shrink-0 text-base">{category.icon}</span>
+      )}
+      
+      {/* Category Name */}
+      <Link
+        href={`/category/${category.id}`}
+        onClick={onLinkClick}
+        className="min-w-0 flex-1"
       >
-        {/* Expand/Collapse Toggle */}
-        <button
-          onClick={onToggle}
-          className={cn(
-            'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded transition-colors',
-            hasChildren ? 'hover:bg-muted-foreground/10' : 'cursor-default opacity-0'
-          )}
-          disabled={!hasChildren}
-          aria-expanded={isExpanded}
-          aria-label={isExpanded ? 'Collapse' : 'Expand'}
-        >
-          <ChevronRight 
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform duration-200',
-              isExpanded && 'rotate-90'
-            )} 
-          />
-        </button>
-
-        {/* Category Link */}
-        <Link
-          href={`/category/${category.id}`}
-          onClick={onLinkClick}
-          className="flex flex-1 items-center gap-2 py-2 pr-3"
-        >
-          <Icon className="h-4 w-4 text-primary" />
-          <div className="min-w-0 flex-1">
-            <span className="font-medium text-foreground">{category.name}</span>
-            {category.nameMyanmar && category.nameMyanmar !== category.name && (
-              <span className="ml-2 text-xs text-muted-foreground">
-                {category.nameMyanmar}
-              </span>
-            )}
-          </div>
-          <span className="flex-shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {category.bookCount.toLocaleString()}
+        <span className={cn(
+          'block truncate text-sm font-medium',
+          isHovered ? 'text-primary-foreground' : 'text-foreground'
+        )}>
+          {category.name}
+        </span>
+        {category.nameMyanmar && category.nameMyanmar !== category.name && (
+          <span className={cn(
+            'block truncate text-xs',
+            isHovered ? 'text-primary-foreground/80' : 'text-muted-foreground'
+          )}>
+            {category.nameMyanmar}
           </span>
-        </Link>
-      </div>
+        )}
+      </Link>
 
-      {/* Sub Categories (Expanded) */}
-      {isExpanded && hasChildren && (
-        <div className="ml-4 border-l border-border pl-2">
-          {category.subCategories!.map((subCategory) => (
-            <SubTreeItem
-              key={subCategory.id}
-              subCategory={subCategory}
-              isExpanded={expandedSub.has(subCategory.id)}
-              onToggle={() => onToggleSub(subCategory.id)}
-              onLinkClick={onLinkClick}
-            />
-          ))}
-        </div>
+      {/* Arrow indicator for sub-categories */}
+      {hasChildren && (
+        <ChevronRight className={cn(
+          'h-4 w-4 flex-shrink-0 transition-colors',
+          isHovered ? 'text-primary-foreground' : 'text-muted-foreground'
+        )} />
       )}
     </div>
   );
 }
 
-// Sub Tree Item Component for Sub Categories
-interface SubTreeItemProps {
+// Sub Category Item Component
+interface SubCategoryItemProps {
   subCategory: SubCategory;
-  isExpanded: boolean;
-  onToggle: () => void;
+  isSelected: boolean;
+  onHover: () => void;
   onLinkClick: () => void;
 }
 
-function SubTreeItem({ 
-  subCategory, 
-  isExpanded, 
-  onToggle, 
-  onLinkClick 
-}: SubTreeItemProps) {
+function SubCategoryItem({ subCategory, isSelected, onHover, onLinkClick }: SubCategoryItemProps) {
   const hasChildren = subCategory.subSubCategories && subCategory.subSubCategories.length > 0;
 
   return (
-    <div className="select-none">
-      {/* Sub Category Row */}
-      <div 
-        className={cn(
-          'group flex items-center gap-1 rounded-md transition-colors',
-          'hover:bg-muted'
-        )}
+    <div
+      className={cn(
+        'group flex items-center gap-2 rounded-md px-3 py-2 transition-colors cursor-pointer',
+        isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+      )}
+      onMouseEnter={onHover}
+    >
+      {/* Sub Category Name */}
+      <Link
+        href={`/category/${subCategory.id}`}
+        onClick={onLinkClick}
+        className="min-w-0 flex-1"
       >
-        {/* Expand/Collapse Toggle */}
-        <button
-          onClick={onToggle}
-          className={cn(
-            'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded transition-colors',
-            hasChildren ? 'hover:bg-muted-foreground/10' : 'cursor-default opacity-0'
-          )}
-          disabled={!hasChildren}
-          aria-expanded={isExpanded}
-          aria-label={isExpanded ? 'Collapse' : 'Expand'}
-        >
-          <ChevronRight 
-            className={cn(
-              'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
-              isExpanded && 'rotate-90'
-            )} 
-          />
-        </button>
-
-        {/* Sub Category Link */}
-        <Link
-          href={`/category/${subCategory.id}`}
-          onClick={onLinkClick}
-          className="flex flex-1 items-center gap-2 py-1.5 pr-3 text-sm"
-        >
-          <div className="min-w-0 flex-1">
-            <span className="text-foreground">{subCategory.name}</span>
-            {subCategory.nameMyanmar && subCategory.nameMyanmar !== subCategory.name && (
-              <span className="ml-2 text-xs text-muted-foreground">
-                {subCategory.nameMyanmar}
-              </span>
-            )}
-          </div>
-          <span className="flex-shrink-0 text-xs text-muted-foreground">
-            {subCategory.bookCount.toLocaleString()}
+        <span className={cn(
+          'block truncate text-sm',
+          isSelected ? 'font-medium text-primary' : 'text-foreground'
+        )}>
+          {subCategory.name}
+        </span>
+        {subCategory.nameMyanmar && subCategory.nameMyanmar !== subCategory.name && (
+          <span className="block truncate text-xs text-muted-foreground">
+            {subCategory.nameMyanmar}
           </span>
-        </Link>
-      </div>
+        )}
+      </Link>
 
-      {/* Sub-Sub Categories (Expanded) */}
-      {isExpanded && hasChildren && (
-        <div className="ml-4 border-l border-border/50 pl-2">
-          {subCategory.subSubCategories!.map((subSubCategory) => (
-            <Link
-              key={subSubCategory.id}
-              href={`/category/${subSubCategory.id}`}
-              onClick={onLinkClick}
-              className="flex items-center gap-2 rounded-md py-1.5 pl-2 pr-3 text-sm transition-colors hover:bg-muted"
-            >
-              <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/40" />
-              <span className="min-w-0 flex-1 text-muted-foreground hover:text-foreground">
-                {subSubCategory.name}
-              </span>
-              <span className="flex-shrink-0 text-xs text-muted-foreground">
-                {subSubCategory.bookCount.toLocaleString()}
-              </span>
-            </Link>
-          ))}
-        </div>
+      {/* Book count */}
+      <span className={cn(
+        'flex-shrink-0 text-xs',
+        isSelected ? 'text-primary' : 'text-muted-foreground'
+      )}>
+        {subCategory.bookCount}
+      </span>
+
+      {/* Arrow indicator for sub-sub-categories */}
+      {hasChildren && (
+        <ChevronRight className={cn(
+          'h-4 w-4 flex-shrink-0 transition-colors',
+          isSelected ? 'text-primary' : 'text-muted-foreground'
+        )} />
       )}
     </div>
+  );
+}
+
+// Sub-Sub Category Item Component
+interface SubSubCategoryItemProps {
+  subSubCategory: SubSubCategory;
+  onLinkClick: () => void;
+}
+
+function SubSubCategoryItem({ subSubCategory, onLinkClick }: SubSubCategoryItemProps) {
+  return (
+    <Link
+      href={`/category/${subSubCategory.id}`}
+      onClick={onLinkClick}
+      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
+    >
+      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary/40" />
+      <span className="min-w-0 flex-1 truncate text-foreground">
+        {subSubCategory.name}
+      </span>
+      <span className="flex-shrink-0 text-xs text-muted-foreground">
+        {subSubCategory.bookCount}
+      </span>
+    </Link>
+  );
+}
+
+// Search Results Component
+interface SearchResultsProps {
+  searchResults: ReturnType<typeof searchCategories> | null;
+  hasSearchResults: boolean | undefined;
+  searchQuery: string;
+  onLinkClick: () => void;
+}
+
+function SearchResults({ searchResults, hasSearchResults, searchQuery, onLinkClick }: SearchResultsProps) {
+  return (
+    <ScrollArea className="h-[420px] w-[500px]">
+      <div className="p-3">
+        {!hasSearchResults ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No categories found for &quot;{searchQuery}&quot;
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {searchResults?.mainCategories.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                  Main Categories
+                </p>
+                {searchResults.mainCategories.map((cat) => (
+                  <Link
+                    key={cat.id}
+                    href={`/category/${cat.id}`}
+                    onClick={onLinkClick}
+                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-primary hover:text-primary-foreground"
+                  >
+                    {cat.icon && <span>{cat.icon}</span>}
+                    <span className="font-medium">{cat.name}</span>
+                    {cat.nameMyanmar && cat.nameMyanmar !== cat.name && (
+                      <span className="text-xs text-muted-foreground">({cat.nameMyanmar})</span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+            {searchResults?.subCategories.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                  Sub Categories
+                </p>
+                {searchResults.subCategories.slice(0, 15).map(({ parent, sub }) => (
+                  <Link
+                    key={sub.id}
+                    href={`/category/${sub.id}`}
+                    onClick={onLinkClick}
+                    className="flex flex-col rounded-md px-3 py-2 text-sm transition-colors hover:bg-primary hover:text-primary-foreground"
+                  >
+                    <span className="font-medium">{sub.name}</span>
+                    <span className="text-xs text-muted-foreground">in {parent.name}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {searchResults?.subSubCategories.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                  Sub-Sub Categories
+                </p>
+                {searchResults.subSubCategories.slice(0, 20).map(({ mainParent, subParent, subSub }) => (
+                  <Link
+                    key={subSub.id}
+                    href={`/category/${subSub.id}`}
+                    onClick={onLinkClick}
+                    className="flex flex-col rounded-md px-3 py-2 text-sm transition-colors hover:bg-primary hover:text-primary-foreground"
+                  >
+                    <span className="font-medium">{subSub.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {subParent.name} &rsaquo; {mainParent.name}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </ScrollArea>
   );
 }
