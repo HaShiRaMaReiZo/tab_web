@@ -26,6 +26,31 @@ export interface Category {
   bookCount: number;
 }
 
+// Hierarchical category structure for mega menu
+export interface SubSubCategory {
+  id: string;
+  name: string;
+  nameMyanmar?: string;
+  bookCount: number;
+}
+
+export interface SubCategory {
+  id: string;
+  name: string;
+  nameMyanmar?: string;
+  bookCount: number;
+  subSubCategories?: SubSubCategory[];
+}
+
+export interface HierarchicalCategory {
+  id: string;
+  name: string;
+  nameMyanmar?: string;
+  icon?: string;
+  bookCount: number;
+  subCategories?: SubCategory[];
+}
+
 export interface Author {
   id: string;
   name: string;

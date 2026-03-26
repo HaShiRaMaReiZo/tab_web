@@ -13,7 +13,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { categories } from '@/lib/data';
+import { hierarchicalCategories } from '@/lib/hierarchical-categories';
 import { useCart } from '@/lib/cart-context';
+import { CategoryMegaMenu } from '@/components/category-mega-menu';
+import { MobileCategoryMenu } from '@/components/mobile-category-menu';
 
 const searchTypes = [
   { value: 'all', label: 'All' },
@@ -144,27 +147,21 @@ export function Header() {
         {/* Category navigation */}
         <nav className="hidden border-t border-border bg-muted/50 md:block">
           <div className="mx-auto max-w-7xl px-4">
-            <ul className="flex items-center gap-1 overflow-x-auto py-2">
-              <li>
+            <div className="flex items-center gap-1 overflow-x-auto py-2">
+              {/* Mega Menu for All Categories */}
+              <CategoryMegaMenu />
+              
+              {/* Quick access to main categories */}
+              {hierarchicalCategories.slice(0, 6).map((category) => (
                 <Link
-                  href="/categories"
-                  className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+                  key={category.id}
+                  href={`/category/${category.id}`}
+                  className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
                 >
-                  <Menu className="h-4 w-4" />
-                  All Categories
+                  {category.name}
                 </Link>
-              </li>
-              {categories.slice(0, 8).map((category) => (
-                <li key={category.id}>
-                  <Link
-                    href={`/category/${category.id}`}
-                    className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
-                  >
-                    {category.name}
-                  </Link>
-                </li>
               ))}
-            </ul>
+            </div>
           </div>
         </nav>
 
@@ -173,28 +170,32 @@ export function Header() {
           <div className="border-t border-border bg-card md:hidden">
             <div className="px-4 py-4">
               <div className="mb-4 flex flex-col gap-2">
-                <Link href="/account" className="flex items-center gap-2 py-2">
+                <Link 
+                  href="/account" 
+                  className="flex items-center gap-2 py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
                   <User className="h-5 w-5" />
                   My Account
                 </Link>
-                <Link href="/help" className="py-2">Help Center</Link>
-                <Link href="/stores" className="py-2">Store Locations</Link>
+                <Link 
+                  href="/help" 
+                  className="py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Help Center
+                </Link>
+                <Link 
+                  href="/stores" 
+                  className="py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Store Locations
+                </Link>
               </div>
               <div className="border-t border-border pt-4">
-                <h3 className="mb-2 font-semibold">Categories</h3>
-                <ul className="grid grid-cols-2 gap-2">
-                  {categories.map((category) => (
-                    <li key={category.id}>
-                      <Link
-                        href={`/category/${category.id}`}
-                        className="block rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        {category.name}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+                <h3 className="mb-3 font-semibold">Browse Categories</h3>
+                <MobileCategoryMenu onNavigate={() => setMobileMenuOpen(false)} />
               </div>
             </div>
           </div>
